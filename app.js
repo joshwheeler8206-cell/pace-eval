@@ -363,8 +363,8 @@ function renderEvaluate() {
   form.appendChild(el('section', { class: 'card info-card' }, [
     el('h2', { class: 'card-title' }, ['Driver Information']),
     field('Driver', 'driver', 'text', current.driver),
-    field('Exp. (Years)', 'exp', 'text', current.exp),
     field('Lic. #', 'lic', 'text', current.lic),
+    field('Exp.', 'exp', 'date', current.exp),
     field('Evaluator', 'evaluator', 'text', current.evaluator),
     field('Date', 'date', 'date', current.date, { required: true }),
   ]));
@@ -387,12 +387,12 @@ function renderEvaluate() {
     current.clicker = 0;
     clickerCount.textContent = '0';
   } }, ['Reset']);
-  form.appendChild(el('section', { class: 'card clicker-card' }, [
+  const clickerCard = el('section', { class: 'card clicker-card' }, [
     el('h2', { class: 'card-title' }, ['Verbal Narration Clicker']),
     el('p', { class: 'timed-note' }, ['Driver verbally narrates full visual field, scanning behavior, and hazard awareness out loud in real time. Tap once for each narration; evaluator can hold the device like a clicker.']),
     clickerCount,
     el('div', { class: 'clicker-row' }, [clickerBtn, clickerReset]),
-  ]));
+  ]);
 
   const progress = el('div', { class: 'progress' });
   view.appendChild(progress);
@@ -439,6 +439,8 @@ function renderEvaluate() {
       ...blocks,
     ]));
   }
+
+  form.appendChild(clickerCard);
 
   form.appendChild(el('section', { class: 'card decision-card' }, [
     el('h2', { class: 'card-title' }, ['Quarterly Driving Evaluation']),
@@ -647,7 +649,7 @@ function renderRecords() {
       el('div', { class: 'rec-main' }, [
         el('div', { class: 'rec-name' }, [r.driver || r.evaluator || '(no driver)']),
         el('div', { class: 'rec-meta' }, [
-          (r.exp ? 'Exp ' + r.exp + ' yr' + (r.exp === '1' ? '' : 's') + '  •  ' : '') +
+          (r.exp ? 'Lic exp ' + r.exp + '  •  ' : '') +
           'Lic ' + (r.lic || '–') + '  •  ' + (r.date || 'no date') + (r.nextPaceDate ? '  •  Next PACE ' + r.nextPaceDate : ''),
         ]),
         el('span', { class: 'badge ' + (low ? 'bad-ni' : 'bad-ok') }, [low ? low + ' Not Practiced' : 'OK']),
@@ -692,11 +694,11 @@ function openReport(id) {
   const meta = el('table', { class: 'rtbl' }, []);
   const metaRow = el('tr', {}, []);
   metaRow.appendChild(el('td', {}, ['<strong>Driver:</strong> ' + esc(r.driver || '–')]));
-  metaRow.appendChild(el('td', {}, ['<strong>Exp:</strong> ' + esc(r.exp || '–')]));
+  metaRow.appendChild(el('td', {}, ['<strong>Evaluator:</strong> ' + esc(r.evaluator || '–')]));
   meta.appendChild(metaRow);
   const metaRow2 = el('tr', {}, []);
   metaRow2.appendChild(el('td', {}, ['<strong>Lic. #:</strong> ' + esc(r.lic || '–')]));
-  metaRow2.appendChild(el('td', {}, ['<strong>Evaluator:</strong> ' + esc(r.evaluator || '–')]));
+  metaRow2.appendChild(el('td', {}, ['<strong>Lic Exp:</strong> ' + esc(r.exp || '–')]));
   meta.appendChild(metaRow2);
   if (r.training) {
     const metaRow3 = el('tr', {}, []);
