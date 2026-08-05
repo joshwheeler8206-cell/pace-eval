@@ -789,7 +789,10 @@ function init() {
 }
 
 if (typeof window !== 'undefined') {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+    navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+  }
   document.addEventListener('DOMContentLoaded', init);
   window.addEventListener('beforeunload', () => stopAllTimers());
 }
