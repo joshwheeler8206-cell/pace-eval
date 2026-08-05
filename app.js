@@ -220,6 +220,8 @@ function newEval() {
   return {
     id: uid(),
     createdAt: new Date().toISOString(),
+    driver: '',
+    exp: '',
     lic: '',
     evaluator: '',
     date: todayISO(),
@@ -358,6 +360,8 @@ function renderEvaluate() {
 
   form.appendChild(el('section', { class: 'card info-card' }, [
     el('h2', { class: 'card-title' }, ['Driver Information']),
+    field('Driver', 'driver', 'text', current.driver),
+    field('Exp. (Years)', 'exp', 'text', current.exp),
     field('Lic. #', 'lic', 'text', current.lic),
     field('Evaluator', 'evaluator', 'text', current.evaluator),
     field('Date', 'date', 'date', current.date, { required: true }),
@@ -540,6 +544,8 @@ function updateProgress() {
 /* ============================== Save / Load / Delete ============================== */
 
 function saveEval() {
+  current.driver = formValue('driver');
+  current.exp = formValue('exp');
   current.lic = formValue('lic');
   current.evaluator = formValue('evaluator');
   current.date = formValue('date');
@@ -552,6 +558,8 @@ function saveEval() {
   stopAllTimers();
   current.evaluatorSig = current._sigEvaluator ? current._sigEvaluator.get() : null;
   current.employeeSig = current._sigEmployee ? current._sigEmployee.get() : null;
+  delete current._sigEvaluator;
+  delete current._sigEmployee;
 
   const lowCount = countLow(current);
 
@@ -614,8 +622,9 @@ function renderRecords() {
     const low = countLow(r);
     list.appendChild(el('div', { class: 'card rec' }, [
       el('div', { class: 'rec-main' }, [
-        el('div', { class: 'rec-name' }, [r.evaluator || '(no evaluator)']),
+        el('div', { class: 'rec-name' }, [r.driver || r.evaluator || '(no driver)']),
         el('div', { class: 'rec-meta' }, [
+          (r.exp ? 'Exp ' + r.exp + ' yr' + (r.exp === '1' ? '' : 's') + '  •  ' : '') +
           'Lic ' + (r.lic || '–') + '  •  ' + (r.date || 'no date') + (r.nextPaceDate ? '  •  Next PACE ' + r.nextPaceDate : ''),
         ]),
         el('span', { class: 'badge ' + (low ? 'bad-ni' : 'bad-ok') }, [low ? low + ' Not Practiced' : 'OK']),
@@ -632,7 +641,7 @@ function renderRecords() {
 }
 
 function exportOne(r) {
-  download('pace-eval-' + (r.evaluator.replace(/\s+/g, '_') || 'driver') + '-' + (r.date || 'nodate') + '.json', JSON.stringify(r, null, 2));
+  download('pace-eval-' + ((r.driver || r.evaluator).replace(/\s+/g, '_') || 'driver') + '-' + (r.date || 'nodate') + '.json', JSON.stringify(r, null, 2));
 }
 
 function exportAll() {
@@ -659,10 +668,19 @@ function openReport(id) {
 
   const meta = el('table', { class: 'rtbl' }, []);
   const metaRow = el('tr', {}, []);
-  metaRow.appendChild(el('td', {}, ['<strong>Lic. #:</strong> ' + esc(r.lic || '–')]));
-  metaRow.appendChild(el('td', {}, ['<strong>Evaluator:</strong> ' + esc(r.evaluator || '–')]));
-  if (r.training) metaRow.appendChild(el('td', {}, ['<strong>Result:</strong> ' + (r.training === 'completed' ? 'Training Completed' : 'Continued Training')]));
+  metaRow.appendChild(el('td', {}, ['<strong>Driver:</strong> ' + esc(r.driver || '–')]));
+  metaRow.appendChild(el('td', {}, ['<strong>Exp:</strong> ' + esc(r.exp || '–')]));
   meta.appendChild(metaRow);
+  const metaRow2 = el('tr', {}, []);
+  metaRow2.appendChild(el('td', {}, ['<strong>Lic. #:</strong> ' + esc(r.lic || '–')]));
+  metaRow2.appendChild(el('td', {}, ['<strong>Evaluator:</strong> ' + esc(r.evaluator || '–')]));
+  meta.appendChild(metaRow2);
+  if (r.training) {
+    const metaRow3 = el('tr', {}, []);
+    metaRow3.appendChild(el('td', {}, ['<strong>Result:</strong> ' + (r.training === 'completed' ? 'Training Completed' : 'Continued Training')]));
+    metaRow3.appendChild(el('td', {}, []));
+    meta.appendChild(metaRow3);
+  }
   report.appendChild(meta);
 
   for (const sec of SECTIONS) {
