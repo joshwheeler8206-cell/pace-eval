@@ -18,6 +18,7 @@ Mobile ride-along evaluation form built around the PACE method: **Plan Ahead, An
 
 - **Live site:** https://joshwheeler8206-cell.github.io/pace-eval/
 - **Android APK:** available from the latest release below (signed, standalone app)
+- **iPhone / iPad:** open the live site in Safari, tap **Share** → **Add to Home Screen** (fullscreen PWA; use Safari for the print/PDF buttons)
 
 ## Tech
 
