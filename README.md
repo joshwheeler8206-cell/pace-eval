@@ -1,4 +1,5 @@
 # U.S. AutoForce PACE Driving Evaluation
+<p align="center"><img src="icons/logo-tile.png" alt="U.S. AutoForce" width="340"></p>
 
 Mobile ride-along evaluation form built around the PACE method: **Plan Ahead, Analyze Surroundings, Communicate, Execute**. Works offline as an installable PWA.
 
