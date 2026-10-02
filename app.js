@@ -149,6 +149,9 @@ async function initStorage() {
     const legacy = loadRecords();
     if (legacy.length) { records = legacy; await persist(); }
   }
+  // Load the shared roster. Without this `roster` stays [] and any rosterUpsert
+  // would overwrite the whole shared roster with a partial record.
+  roster = await rosterGet();
 }
 
 /* ============================== Driver Roster (shared) ============================== */
