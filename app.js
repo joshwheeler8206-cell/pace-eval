@@ -869,7 +869,7 @@ function openReport(id) {
         el('td', {}, [st.rating ? '★ ' + RATING_LABEL[st.rating] : '—']),
       ]));
     }
-    if (state.notes) rows.push(el('tr', {}, [el('td', { colspan: 2 }, ['<em>' + esc(state.notes) + '</em>'])]));;
+    if (state.notes) rows.push(el('tr', {}, [el('td', { colspan: 2 }, [el('em', {}, [state.notes])])]));
     report.appendChild(el('div', { class: 'rsec' }, [
       el('h3', {}, [sec.num + '. ' + sec.title]),
       el('table', { class: 'rtbl' }, rows),
