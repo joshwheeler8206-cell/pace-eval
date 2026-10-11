@@ -133,6 +133,7 @@ function persist() {
   const snapshot = JSON.parse(JSON.stringify(records));
   if (canIdb) {
     _writeQueue = _writeQueue.then(() => idbSet(STORE_KEY, snapshot)).catch(() => {});
+    scheduleAutoBackup();
     return _writeQueue;
   }
   try {
@@ -140,6 +141,7 @@ function persist() {
   } catch (e) {
     toast('Storage is full. Try exporting and deleting old records.');
   }
+  scheduleAutoBackup();
   return Promise.resolve();
 }
 
@@ -736,6 +738,8 @@ function renderRecords() {
     el('button', { class: 'btn ghost', onclick: exportAll }, ['Export All (JSON)']),
   ]);
   view.appendChild(head);
+  view.appendChild(autoBackupToggleUI());
+  view.appendChild(el('div', { style: 'height:12px' }));
 
   if (!sorted.length) {
     view.appendChild(el('div', { class: 'empty' }, ['No PACE evaluations saved yet. Complete one from the Evaluate tab.']));
@@ -774,6 +778,42 @@ function exportAll() {
   download('pace-evaluations-' + todayISO() + '.json', JSON.stringify(records, null, 2));
 }
 
+/* ---------- Auto-backup ----------
+   Keeps an off-device, recoverable copy: a timestamped JSON file drops into
+   Downloads a few seconds after you stop entering data. Debounced 15s,
+   throttled to one per 5 min, capped per session. Toggle on the Records tab. */
+const AUTOBACKUP_KEY = 'autobk_pace';
+let _abEnabled = (localStorage.getItem(AUTOBACKUP_KEY) !== 'off');
+let _abTimer = null, _abLast = 0, _abCount = 0, _abPending = false;
+const AB_DELAY = 15000, AB_MIN_GAP = 300000, AB_MAX = 6;
+
+function autoBackupEnabled() { return _abEnabled; }
+function setAutoBackup(on) { _abEnabled = !!on; try { localStorage.setItem(AUTOBACKUP_KEY, on ? 'on' : 'off'); } catch (e) {} }
+function scheduleAutoBackup() { if (!_abEnabled) return; _abPending = true; clearTimeout(_abTimer); _abTimer = setTimeout(runAutoBackup, AB_DELAY); }
+function runAutoBackup() {
+  if (!_abEnabled || !_abPending) return;
+  const now = Date.now();
+  if (_abCount >= AB_MAX) { _abPending = false; return; }
+  if (_abLast && now - _abLast < AB_MIN_GAP) { _abTimer = setTimeout(runAutoBackup, AB_MIN_GAP - (now - _abLast)); return; }
+  _abPending = false; _abLast = now; _abCount++;
+  try {
+    if (!records.length) return;
+    const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '');
+    download('pace-auto-' + ts + '.json', JSON.stringify(records, null, 2));
+  } catch (e) {}
+}
+function autoBackupToggleUI() {
+  const ck = el('input', { type: 'checkbox', class: 'ab-ck', onchange: (e) => { setAutoBackup(e.target.checked); toast(e.target.checked ? 'Auto-backup ON' : 'Auto-backup OFF'); } });
+  ck.checked = _abEnabled;
+  return el('label', { class: 'ab-toggle' }, [
+    ck,
+    el('span', { class: 'ab-txt' }, [
+      el('span', { class: 'ab-title' }, ['Auto-backup to Downloads']),
+      el('span', { class: 'sub' }, ['Saves a timestamped backup file to Downloads a few seconds after you stop entering data (up to 6 per session).']),
+    ]),
+  ]);
+}
+
 /* ============================== Render: Report ============================== */
 
 function openReport(id) {
@@ -793,16 +833,16 @@ function openReport(id) {
 
   const meta = el('table', { class: 'rtbl' }, []);
   const metaRow = el('tr', {}, []);
-  metaRow.appendChild(el('td', {}, ['<strong>Driver:</strong> ' + esc(r.driver || '–')]));
-  metaRow.appendChild(el('td', {}, ['<strong>Evaluator:</strong> ' + esc(r.evaluator || '–')]));
+  metaRow.appendChild(el('td', {}, [el('strong', {}, ['Driver:']), ' ' + (r.driver || '–')]));
+  metaRow.appendChild(el('td', {}, [el('strong', {}, ['Evaluator:']), ' ' + (r.evaluator || '–')]));
   meta.appendChild(metaRow);
   const metaRow2 = el('tr', {}, []);
-  metaRow2.appendChild(el('td', {}, ['<strong>Lic. #:</strong> ' + esc(r.lic || '–')]));
-  metaRow2.appendChild(el('td', {}, ['<strong>Lic Exp:</strong> ' + esc(r.exp || '–')]));
+  metaRow2.appendChild(el('td', {}, [el('strong', {}, ['Lic. #:']), ' ' + (r.lic || '–')]));
+  metaRow2.appendChild(el('td', {}, [el('strong', {}, ['Lic Exp:']), ' ' + (r.exp || '–')]));
   meta.appendChild(metaRow2);
   if (r.training) {
     const metaRow3 = el('tr', {}, []);
-    metaRow3.appendChild(el('td', {}, ['<strong>Result:</strong> ' + (r.training === 'completed' ? 'Training Completed' : 'Continued Training')]));
+    metaRow3.appendChild(el('td', {}, [el('strong', {}, ['Result:']), ' ' + (r.training === 'completed' ? 'Training Completed' : 'Continued Training')]));
     metaRow3.appendChild(el('td', {}, []));
     meta.appendChild(metaRow3);
   }
