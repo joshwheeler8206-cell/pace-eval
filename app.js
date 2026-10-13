@@ -209,7 +209,7 @@ function rosterUpsert(entry) {
   if (!name) return;
   const existing = rosterFind(name);
   if (existing) {
-    for (const k of ['license', 'warehouse', 'hireDate', 'trainer']) {
+    for (const k of ['license', 'warehouse', 'phone', 'hireDate', 'trainer', 'licenseExp', 'medCardExp']) {
       const v = String((entry && entry[k]) || '').trim();
       if (v) existing[k] = v;
     }
@@ -218,11 +218,25 @@ function rosterUpsert(entry) {
       name,
       license: String((entry && entry.license) || '').trim(),
       warehouse: String((entry && entry.warehouse) || '').trim(),
+      phone: String((entry && entry.phone) || '').trim(),
       hireDate: String((entry && entry.hireDate) || '').trim(),
       trainer: String((entry && entry.trainer) || '').trim(),
+      licenseExp: String((entry && entry.licenseExp) || '').trim(),
+      medCardExp: String((entry && entry.medCardExp) || '').trim(),
     });
   }
   rosterPut(roster);
+}
+
+// Every driver name the app knows about: the shared roster plus any driver that
+// only lives in the Cert Tracker — so the name pickers never come up empty just
+// because a driver was first added on a different screen.
+function knownDriverNames() {
+  const seen = {};
+  const add = (n) => { const s = String(n || '').trim(); if (s) seen[s.toLowerCase()] = s; };
+  for (const r of roster) add(r.name);
+  if (typeof drivers !== 'undefined' && drivers) for (const d of drivers) add(d.name);
+  return Object.keys(seen).sort((a, b) => a.localeCompare(b)).map((k) => seen[k]);
 }
 
 function ensureRosterDatalist() {
@@ -232,23 +246,171 @@ function ensureRosterDatalist() {
     document.body.appendChild(dl);
   }
   dl.innerHTML = '';
-  for (const r of roster) dl.appendChild(el('option', { value: r.name }));
+  for (const n of knownDriverNames()) dl.appendChild(el('option', { value: n }));
   return dl;
 }
 
+/* ---------- Reliable Month / Day / Year date entry ----------
+   A native <input type="date"> calendar cannot always reach another year: on
+   several phones and tablets (and inside installed web apps) tapping the year
+   header simply does nothing, so a future licence expiry becomes impossible to
+   enter. These three plain dropdowns always work on every device, and still
+   store the same 'YYYY-MM-DD' string the app already uses. */
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function splitISO(iso) {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(iso == null ? '' : iso).trim());
+  return m ? { y: +m[1], m: +m[2], d: +m[3] } : { y: 0, m: 0, d: 0 };
+}
+
+function joinISO(y, m, d) {
+  if (!y || !m || !d) return '';
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+
+// Month / Day / Year dropdowns. onChange(iso) fires on every pick; iso is ''
+// until all three are chosen. A pre-filled date keeps its day and month, so
+// just changing the year re-dates the whole field in one tap.
+function dateSelects(value, onChange) {
+  const cur = splitISO(value);
+  const thisYear = new Date().getFullYear();
+  const mSel = el('select', { class: 'dt-m', 'aria-label': 'Month' });
+  const dSel = el('select', { class: 'dt-d', 'aria-label': 'Day' });
+  const ySel = el('select', { class: 'dt-y', 'aria-label': 'Year' });
+  const emit = () => {
+    let y = Number(ySel.value) || 0;
+    let m = Number(mSel.value) || 0;
+    let d = Number(dSel.value) || 0;
+    if (y && m && d) { const last = new Date(y, m, 0).getDate(); if (d > last) d = last; onChange(joinISO(y, m, d)); return; }
+    onChange(joinISO(y, m, d));
+  };
+  mSel.appendChild(el('option', { value: '' }, ['Month']));
+  MONTH_LABELS.forEach((label, i) => mSel.appendChild(el('option', { value: i + 1, selected: cur.m === i + 1 }, [label])));
+  dSel.appendChild(el('option', { value: '' }, ['Day']));
+  for (let i = 1; i <= 31; i++) dSel.appendChild(el('option', { value: i, selected: cur.d === i }, [i]));
+  ySel.appendChild(el('option', { value: '' }, ['Year']));
+  for (let y = thisYear + 12; y >= thisYear - 40; y--) ySel.appendChild(el('option', { value: y, selected: cur.y === y }, [y]));
+  [mSel, dSel, ySel].forEach((s) => s.addEventListener('change', emit));
+  return el('div', { class: 'dt-row' }, [mSel, dSel, ySel]);
+}
+
+// Same trio, but the field's original id lives on a hidden input so existing
+// readers (document.getElementById(id).value) keep working untouched.
+function dateField(labelText, id, value) {
+  const hidden = el('input', { type: 'hidden', id, value: value || '' });
+  const row = dateSelects(value || '', (iso) => { hidden.value = iso; });
+  return el('div', { class: 'field' }, [el('span', { class: 'field-label' }, [labelText]), row, hidden]);
+}
+
+// Write an ISO date into a field by id and, when that id sits on a Month/Day/Year
+// trio, move the three dropdowns to match — so autofill from the roster shows up
+// in the visible controls instead of only landing on the hidden carrier.
+function syncDateField(id, iso) {
+  const hidden = document.getElementById(id);
+  if (!hidden) return;
+  hidden.value = iso || '';
+  const host = hidden.parentNode;
+  if (!host || !host.children) return;
+  // NB: children is an HTMLCollection in a real browser (no .find/.forEach) —
+  // walk it by index so this works on every engine as well as in the test mock.
+  let row = null;
+  for (let i = 0; i < host.children.length; i++) {
+    const c = host.children[i];
+    const cn = String((c && c.className) || '');
+    if ((' ' + cn + ' ').indexOf(' dt-row ') >= 0) { row = c; break; }
+  }
+  if (!row || row.children.length !== 3) return;
+  const p = splitISO(iso);
+  const vals = [p.m ? String(p.m) : '', p.d ? String(p.d) : '', p.y ? String(p.y) : ''];
+  for (let i = 0; i < row.children.length; i++) {
+    const sel = row.children[i];
+    if (sel && sel.tagName === 'SELECT') sel.value = vals[i];
+  }
+}
+
+// Read an ISO date back as MM/DD/YYYY for the read-only roster summary.
+function fmtDate(iso) {
+  const p = splitISO(iso);
+  if (!p.y) return String(iso == null ? '' : iso).trim();
+  return String(p.m).padStart(2, '0') + '/' + String(p.d).padStart(2, '0') + '/' + p.y;
+}
+
+// Everything the roster knows about a driver that a form might want to show.
+// The mapped fields get filled into the form; whatever is left over is printed
+// under the name (hire date, lic. #, licence / med-card expirations).
+function rosterInfoBits(r) {
+  if (!r) return [];
+  const out = [];
+  const add = (label, v) => {
+    const s = String(v == null ? '' : v).trim();
+    if (s) out.push(label + ' ' + s);
+  };
+  add('Hire date', fmtDate(r.hireDate));
+  add('Lic.#', r.license);
+  add('Lic. exp', fmtDate(r.licenseExp));
+  add('Med card exp', fmtDate(r.medCardExp));
+  add('Warehouse', r.warehouse);
+  add('Trainer', r.trainer);
+  return out;
+}
+
+// Name input with typeahead; when it matches a roster driver, fills the given
+// field ids from the roster (only when the target field is still empty) and
+// shows the rest of what the roster knows about them.
+// The field also carries a plain <select> pull-down of every known driver name:
+// a native <datalist> popup only opens once you start typing (and on some phones
+// and in installed web apps it never opens at all), so the dropdown is the
+// dependable way to pick someone who is already on the roster.
 function rosterField(labelText, id, value, fields, extra = {}) {
   const input = el('input', { type: 'text', id, value, list: 'roster-names', autocomplete: 'off', ...extra });
-  const fill = () => {
+  const info = el('div', { class: 'roster-info' });
+  info.style.display = 'none'; // nothing shown until a roster driver is matched
+  const paintInfo = (r) => {
+    const bits = rosterInfoBits(r);
+    info.innerHTML = '';
+    if (bits.length) {
+      info.appendChild(el('b', {}, ['From roster: ']));
+      info.appendChild(el('span', {}, [bits.join('  •  ')]));
+    }
+    info.style.display = bits.length ? '' : 'none';
+  };
+  // force = the user just picked the driver, so the roster wins; typing only
+  // fills fields that are still blank so nothing they typed gets stomped.
+  const fill = (force) => {
     const r = rosterFind(input.value);
+    paintInfo(r);
     if (!r) return;
     for (const [fid, prop] of Object.entries(fields)) {
       const n = document.getElementById(fid);
-      if (n && !n.value) n.value = r[prop] || '';
+      if (!n || (n.value && !force)) continue;
+      syncDateField(fid, r[prop] || '');
     }
   };
-  input.addEventListener('input', fill);
-  input.addEventListener('change', fill);
-  return el('label', { class: 'field' }, [el('span', { class: 'field-label' }, [labelText]), input]);
+  input.addEventListener('input', () => fill(false));
+  input.addEventListener('change', () => fill(false));
+  if (value) paintInfo(rosterFind(value));
+  const kids = [el('span', { class: 'field-label' }, [labelText]), input];
+  const names = knownDriverNames();
+  if (names.length) {
+    const pick = el('select', { class: 'roster-pick', 'aria-label': 'Choose ' + labelText + ' from the driver roster' });
+    pick.appendChild(el('option', { value: '' }, ['Choose from roster…']));
+    for (const n of names) pick.appendChild(el('option', { value: n }, [n]));
+    pick.addEventListener('change', (e) => {
+      const n = e.target.value;
+      if (!n) return;
+      input.value = n;
+      fill(true);
+      // Let any field-level handler (persisting the name, autofill, ...) run.
+      if (typeof Event === 'function' && input.dispatchEvent) {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      pick.value = '';
+    });
+    kids.push(pick);
+  }
+  kids.push(info);
+  return el('label', { class: 'field' }, kids);
 }
 
 /* ============================== Helpers ============================== */
@@ -261,7 +423,7 @@ function el(tag, attrs = {}, children = []) {
     else if (k === 'html') node.innerHTML = v;
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
     else if (k === 'style') node.style.cssText = v;
-    else if (v !== undefined && v !== null) node.setAttribute(k, v);
+    else if (v !== undefined && v !== null && v !== false) node.setAttribute(k, v);
   }
   for (const c of children) {
     if (c === null || c === undefined) continue;
@@ -463,9 +625,9 @@ function renderEvaluate() {
 
   form.appendChild(el('section', { class: 'card info-card' }, [
     el('h2', { class: 'card-title' }, ['Driver Information']),
-    rosterField('Driver', 'driver', current.driver, { lic: 'license' }),
+    rosterField('Driver', 'driver', current.driver, { lic: 'license', exp: 'licenseExp' }),
     field('Lic. #', 'lic', 'text', current.lic),
-    field('Exp.', 'exp', 'date', current.exp),
+    dateField('Exp.', 'exp', current.exp),
     field('Evaluator', 'evaluator', 'text', current.evaluator),
     field('Date', 'date', 'date', current.date, { required: true }),
   ]));

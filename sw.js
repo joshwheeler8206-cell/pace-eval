@@ -1,4 +1,4 @@
-const CACHE = 'pace-eval-v13';
+const CACHE = 'pace-eval-v15';
 const ASSETS = [
   './',
   './index.html',
