@@ -1139,7 +1139,6 @@ function afPaceSpec(r) {
   const footnotes = [];
   footnotes.push('Items rated Not Practiced: ' + countLow(r) + ' of ' + totalItems());
   if (r.trainingCompleteDate) footnotes.push('PACE Behavioral Driving Evaluation Training Complete Date: ' + fmtDate(r.trainingCompleteDate));
-  footnotes.push('Generated ' + todayISO() + ' · U.S. AutoForce · Field Operations');
   return {
     kind: 'PACE',
     name: r.driver || r.evaluator || 'Driver',
